@@ -10,7 +10,7 @@ import requests
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.20'
+__version__ = '1.0.0'
 
 
 class Json2Mqtt:
