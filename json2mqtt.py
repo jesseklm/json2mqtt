@@ -2,8 +2,8 @@ import json
 import logging
 import signal
 import sys
+import time
 from functools import reduce
-from time import sleep, time
 
 import requests
 
@@ -37,22 +37,21 @@ class Json2Mqtt:
 
     def loop(self):
         while True:
-            start_time = time()
+            start_time = time.perf_counter()
             for url, request in self.requests.items():
                 response = requests.get(url, headers=self.headers)
                 value = json.loads(response.text)
                 value = reduce(lambda d, key: d[key], request['path'], value)
                 self.mqtt_handler.publish(request['topic'], value, request.get('retain', False))
-            time_taken = time() - start_time
+            time_taken = time.perf_counter() - start_time
             time_to_sleep = self.update_rate - time_taken
             logging.debug('looped in %.2fms, sleeping %.2fs.', time_taken * 1000, time_to_sleep)
             if time_to_sleep > 0:
-                sleep(time_to_sleep)
+                time.sleep(time_to_sleep)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.getLogger('pymodbus').setLevel(logging.INFO)
     logging.info('starting Json2Mqtt v%s.', __version__)
     app = Json2Mqtt()
     app.loop()
