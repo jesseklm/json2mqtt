@@ -6,11 +6,12 @@ import time
 from functools import reduce
 
 import requests
+from urllib3.exceptions import MaxRetryError, NameResolutionError
 
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 
 class Json2Mqtt:
@@ -39,10 +40,19 @@ class Json2Mqtt:
         while True:
             start_time = time.perf_counter()
             for url, request in self.requests.items():
-                response = requests.get(url, headers=self.headers)
-                value = json.loads(response.text)
-                value = reduce(lambda d, key: d[key], request['path'], value)
-                self.mqtt_handler.publish(request['topic'], value, request.get('retain', False))
+                try:
+                    response = requests.get(url, headers=self.headers)
+                    value = json.loads(response.text)
+                    value = reduce(lambda d, key: d[key], request['path'], value)
+                    self.mqtt_handler.publish(request['topic'], value, request.get('retain', False))
+                except MaxRetryError as e:
+                    logging.error('%s max retries exceeded: %s', url, e)
+                except NameResolutionError as e:
+                    logging.error('%s failed to resolve hostname: %s', url, e)
+                except ConnectionError as e:
+                    logging.error('%s connection failed: %s', url, e)
+                except Exception as e:
+                    logging.error('%s failed: %s', url, e)
             time_taken = time.perf_counter() - start_time
             time_to_sleep = self.update_rate - time_taken
             logging.debug('looped in %.2fms, sleeping %.2fs.', time_taken * 1000, time_to_sleep)
