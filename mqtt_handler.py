@@ -1,51 +1,39 @@
 import logging
-import queue
-import threading
-from time import sleep
 
-import paho.mqtt.client as mqtt
-from paho.mqtt.packettypes import PacketTypes
-from paho.mqtt.reasoncodes import ReasonCode
+from gmqtt import Client as MQTTClient, Message
 
 
 class MqttHandler:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict) -> None:
         self.topic_prefix: str = config.get('mqtt_topic', 'json2mqtt/').rstrip('/') + '/'
         self.host: str = config['mqtt_server']
         self.port: int = config.get('mqtt_port', 1883)
 
-        self.mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        will_message: Message = Message(self.topic_prefix + 'available', 'offline', will_delay_interval=5, retain=True)
+        self.mqttc: MQTTClient = MQTTClient(client_id=None, will_message=will_message)
         self.mqttc.on_connect = self.on_connect
-        self.mqttc.username_pw_set(config['mqtt_username'], config['mqtt_password'])
-        self.mqttc.will_set(self.topic_prefix + 'available', 'offline', retain=True)
-        self.mqttc.connect_async(host=self.host, port=self.port)
-        self.mqttc.loop_start()
+        self.mqttc.set_auth_credentials(config['mqtt_username'], config['mqtt_password'])
 
-        self.publishing_queue = queue.Queue()
+    def on_connect(self, client, flags, rc, properties):
+        client.publish(self.topic_prefix + 'available', 'online', retain=True)
+        logging.info('mqtt connected.')
 
-        self.publishing_thread = threading.Thread(target=self.publishing_handler, daemon=True)
-        self.publishing_thread.start()
+    def publish(self, topic: str, payload: str | int | float, retain: bool = False) -> None:
+        self.mqttc.publish(self.topic_prefix + topic, payload, retain=retain)
 
-    def on_connect(self, client, userdata, connect_flags, reason_code, properties):
-        self.mqttc.publish(self.topic_prefix + 'available', 'online', retain=True)
-        if reason_code == ReasonCode(PacketTypes.CONNACK, 'Success'):
-            logging.info('mqtt connected.')
-        else:
-            logging.error(f'mqtt connection to %s:%s failed, %s.', self.host, self.port, reason_code)
+    async def connect(self) -> bool:
+        if self.mqttc.is_connected:
+            return True
+        try:
+            await self.mqttc.connect(self.host, self.port)
+            return True
+        except ConnectionRefusedError as e:
+            logging.warning(f"mqtt: {self.host=}, {e=}")
+        except Exception as e:
+            logging.error(f"mqtt: {self.host=}, {e=}")
+        return False
 
-    def publish(self, topic: str, payload: str | int | float, retain=False):
-        self.publishing_queue.put({
-            'topic': self.topic_prefix + topic,
-            'payload': payload,
-            'retain': retain,
-        })
-
-    def publishing_handler(self):
-        while True:
-            message: dict = self.publishing_queue.get()
-            while not self.mqttc.is_connected():
-                sleep(1)
-            result = self.mqttc.publish(**message)
-            if result.rc != mqtt.MQTT_ERR_SUCCESS:
-                logging.error(f'mqtt publish failed: %s %s.', message, result)
-            self.publishing_queue.task_done()
+    async def disconnect(self):
+        if self.mqttc.is_connected:
+            await self.mqttc.disconnect(reason_code=4)
+            logging.info('mqtt disconnected.')
