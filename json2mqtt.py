@@ -11,7 +11,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.3'
+__version__ = '1.0.4'
 
 
 class Json2Mqtt:
@@ -41,7 +41,10 @@ class Json2Mqtt:
             return
         for url, request in self.requests.items():
             value = json.loads(await self.fetch(url))
-            value = reduce(lambda d, key: d[key], request['path'], value)
+            try:
+                value = reduce(lambda d, key: d[key], request['path'], value)
+            except KeyError as e:
+                logging.warning('unexpected response: %s. %s', value, str(e))
             self.mqtt_handler.publish(request['topic'], value, request.get('retain', False))
 
     async def loop(self) -> None:
