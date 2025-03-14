@@ -11,7 +11,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.5'
+__version__ = '1.0.6'
 
 
 class Json2Mqtt:
@@ -40,18 +40,20 @@ class Json2Mqtt:
         if not await self.mqtt_handler.connect():
             return
         for url, topics in self.requests.items():
-            value = json.loads(await self.fetch(url))
+            js_content = json.loads(await self.fetch(url))
             for topic, options in topics.items():
                 try:
-                    value = reduce(lambda d, key: d[key], options['path'], value)
+                    value = reduce(lambda d, key: d[key], options['path'], js_content)
                 except KeyError as e:
-                    logging.warning('unexpected response: %s. %s', value, str(e))
+                    logging.warning('unexpected response: %s. %s', js_content, str(e))
+                    continue
                 if 'factor' in options:
                     try:
                         value = float(value)
                         value = value * options['factor']
                     except ValueError as e:
                         logging.warning('failed to convert: %s. %s', value, str(e))
+                        continue
                 self.mqtt_handler.publish(topic, value, options.get('retain', False))
 
     async def loop(self) -> None:
