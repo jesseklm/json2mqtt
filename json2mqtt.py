@@ -11,7 +11,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.6'
+__version__ = '1.0.7'
 
 
 class Json2Mqtt:
@@ -40,7 +40,10 @@ class Json2Mqtt:
         if not await self.mqtt_handler.connect():
             return
         for url, topics in self.requests.items():
-            js_content = json.loads(await self.fetch(url))
+            response = await self.fetch(url)
+            if not response:
+                continue
+            js_content = json.loads(response)
             for topic, options in topics.items():
                 try:
                     value = reduce(lambda d, key: d[key], options['path'], js_content)
