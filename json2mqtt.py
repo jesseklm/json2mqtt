@@ -11,7 +11,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.8'
+__version__ = '1.0.9'
 
 
 class Json2Mqtt:
@@ -58,7 +58,7 @@ class Json2Mqtt:
                         if offset:
                             value += options['offset']
                         if factor:
-                            value *= options['factor']
+                            value = round(value * options['factor'], 10)
                     except ValueError as e:
                         logging.warning('failed to convert: %s. %s', value, str(e))
                         continue
