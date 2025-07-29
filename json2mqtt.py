@@ -111,9 +111,6 @@ async def main():
 
 
 if __name__ == '__main__':
-    print(24.950000000000045)
-    print(round(24.950000000000045, 10))
-    exit(0)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.getLogger('gmqtt').setLevel(logging.ERROR)
     logging.info('starting Json2Mqtt v%s.', __version__)
