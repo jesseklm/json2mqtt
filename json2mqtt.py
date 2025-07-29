@@ -58,7 +58,8 @@ class Json2Mqtt:
                         if offset:
                             value += options['offset']
                         if factor:
-                            value = round(value * options['factor'], 10)
+                            value *= options['factor']
+                        value = round(value, 10)
                     except ValueError as e:
                         logging.warning('failed to convert: %s. %s', value, str(e))
                         continue
@@ -110,6 +111,9 @@ async def main():
 
 
 if __name__ == '__main__':
+    print(24.950000000000045)
+    print(round(24.950000000000045, 10))
+    exit(0)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.getLogger('gmqtt').setLevel(logging.ERROR)
     logging.info('starting Json2Mqtt v%s.', __version__)
