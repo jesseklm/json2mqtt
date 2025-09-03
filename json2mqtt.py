@@ -11,7 +11,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.12'
+__version__ = '1.0.13'
 
 
 class Json2Mqtt:
@@ -37,8 +37,6 @@ class Json2Mqtt:
                 logging.warning('unknown logging level: %s.', logging_level)
 
     async def loop_iteration(self) -> None:
-        if not await self.mqtt_handler.connect():
-            return
         for url, topics in self.requests.items():
             response = await self.fetch(url)
             if not response:
