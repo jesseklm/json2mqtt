@@ -1,4 +1,7 @@
-FROM ghcr.io/astral-sh/uv:python3.14-alpine AS builder
+FROM python:3.14-alpine AS builder
+ADD https://astral.sh/uv/0.9.26/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh
+ENV PATH="/root/.local/bin/:$PATH"
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV UV_NO_DEV=1

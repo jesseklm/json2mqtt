@@ -11,7 +11,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.15'
+__version__ = '1.0.16'
 
 
 class Json2Mqtt:
