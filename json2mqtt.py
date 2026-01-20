@@ -11,12 +11,12 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.13'
+__version__ = '1.0.14'
 
 
 class Json2Mqtt:
     def __init__(self):
-        config = get_first_config()
+        config: dict = get_first_config()
         self.setup_logging(config)
         self.mqtt_handler = MqttHandler(config)
         self.headers: dict = config.get('headers')
@@ -29,8 +29,8 @@ class Json2Mqtt:
     @staticmethod
     def setup_logging(config):
         if 'logging' in config:
-            logging_level_name = config['logging'].upper()
-            logging_level = logging.getLevelNamesMapping().get(logging_level_name, logging.NOTSET)
+            logging_level_name: str = config['logging'].upper()
+            logging_level: int = logging.getLevelNamesMapping().get(logging_level_name, logging.NOTSET)
             if logging_level != logging.NOTSET:
                 logging.getLogger().setLevel(logging_level)
             else:
@@ -64,14 +64,17 @@ class Json2Mqtt:
                 self.mqtt_handler.publish(topic, value, options.get('retain', False))
 
     async def loop(self) -> None:
-        while True:
-            start_time: float = time.perf_counter()
-            await self.loop_iteration()
-            time_taken: float = time.perf_counter() - start_time
-            time_to_sleep: float = self.update_rate - time_taken
-            logging.debug('looped in %.2fms, sleeping %.2fs.', time_taken * 1000, time_to_sleep)
-            if time_to_sleep > 0:
-                await asyncio.sleep(time_to_sleep)
+        try:
+            while True:
+                start_time: float = time.perf_counter()
+                await self.loop_iteration()
+                time_taken: float = time.perf_counter() - start_time
+                time_to_sleep: float = self.update_rate - time_taken
+                logging.debug('looped in %.2fms, sleeping %.2fs.', time_taken * 1000, time_to_sleep)
+                if time_to_sleep > 0:
+                    await asyncio.sleep(time_to_sleep)
+        except KeyboardInterrupt:
+            await self.mqtt_handler.mqttc.disconnect()
 
     async def fetch(self, url: str) -> str:
         async with httpcore.AsyncConnectionPool() as http:

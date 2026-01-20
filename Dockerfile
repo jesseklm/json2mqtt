@@ -1,9 +1,12 @@
-FROM python:3.13-alpine
+FROM ghcr.io/astral-sh/uv:python3.14-alpine
 
-WORKDIR /usr/src/app
+WORKDIR /app
+
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
 COPY . .
 
-RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+RUN uv sync --locked
 
-CMD [ "python", "./json2mqtt.py" ]
+CMD [ "uv", "run", "json2mqtt.py" ]

@@ -1,3 +1,0 @@
-httpcore[asyncio]~=1.0.7
-gmqtt~=0.7.0
-PyYAML~=6.0.2

@@ -5,7 +5,7 @@ import yaml
 
 
 def get_config_local(filename: Path) -> dict:
-    with open(filename) as file:
+    with open(filename, encoding='utf-8') as file:
         try:
             return yaml.safe_load(file)
         except yaml.YAMLError as e:
@@ -14,17 +14,17 @@ def get_config_local(filename: Path) -> dict:
 
 
 def get_first_config() -> dict:
-    files = [
+    files: list[Path] = [
         Path('/config/config.yaml'),
-        Path('config.yaml')
+        Path('config.yaml'),
     ]
     for file in files:
         if file.exists():
-            loaded_config = get_config_local(file)
+            loaded_config: dict = get_config_local(file)
             break
     else:
         raise FileNotFoundError
-    options_files = [
+    options_files: list[Path] = [
         Path('/data/options.json'),
         Path('/data/options.yaml'),
     ]
@@ -34,7 +34,7 @@ def get_first_config() -> dict:
                 with open(options_file) as file:
                     options: dict = json.load(file)
             else:
-                options = get_config_local(options_file)
+                options: dict = get_config_local(options_file)
             for key, option in options.items():
                 if isinstance(option, str) and option:
                     loaded_config[key] = option
