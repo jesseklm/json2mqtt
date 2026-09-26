@@ -3,7 +3,9 @@ import json
 import logging
 import signal
 import time
+import tomllib
 from functools import reduce
+from pathlib import Path
 
 import httpcore
 from httpcore import ConnectError
@@ -11,7 +13,8 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '1.0.16'
+with (Path(__file__).parent / 'pyproject.toml').open('rb') as f:
+    __version__ = tomllib.load(f)['project']['version']
 
 
 class Json2Mqtt:
@@ -20,8 +23,27 @@ class Json2Mqtt:
         self.setup_logging(config)
         self.mqtt_handler = MqttHandler(config)
         self.headers: dict = config.get('headers')
+        # requests structure:
+        # {
+        #     "<URL>": {
+        #         "update_rate": 60,                                # Optional: update interval in seconds
+        #         "headers": {                                      # Optional: HTTP headers specific to this URL
+        #             "Authorization": "Bearer xxx",
+        #             "Accept": "application/json"
+        #         },
+        #         "topics": {
+        #             "<MQTT topic>": {
+        #                 "path": ["json", "keys", "to", "value"],  # Path to the value in the JSON response
+        #                 "retain": True,                           # Optional: MQTT retain flag
+        #                 "offset": 1.0,                            # Optional: Value offset
+        #                 "factor": 0.1                             # Optional: Value multiplier
+        #             }
+        #         }
+        #     }
+        # }
         self.requests: dict = config['requests']
         self.update_rate: int = config.get('update_rate', 600)
+        self.last_request: dict = {}
 
     async def exit(self):
         await self.mqtt_handler.disconnect()
@@ -37,12 +59,20 @@ class Json2Mqtt:
                 logging.warning('unknown logging level: %s.', logging_level)
 
     async def loop_iteration(self) -> None:
-        for url, topics in self.requests.items():
-            response = await self.fetch(url)
+        now = time.monotonic()
+
+        for url, request in self.requests.items():
+            update_rate = request.get('update_rate', self.update_rate)
+            last_run = self.last_request.get(url, 0)
+            if now - last_run < update_rate:
+                continue
+            self.last_request[url] = now
+
+            response = await self.fetch(url, request.get('headers'))
             if not response:
                 continue
             js_content = json.loads(response)
-            for topic, options in topics.items():
+            for topic, options in request['topics'].items():
                 try:
                     value = reduce(lambda d, key: d[key], options['path'], js_content)
                 except KeyError as e:
@@ -69,17 +99,21 @@ class Json2Mqtt:
                 start_time: float = time.perf_counter()
                 await self.loop_iteration()
                 time_taken: float = time.perf_counter() - start_time
-                time_to_sleep: float = self.update_rate - time_taken
+                next_updates = [
+                    request.get('update_rate', self.update_rate) - (time.monotonic() - self.last_request.get(url, 0))
+                    for url, request in self.requests.items()
+                ]
+                time_to_sleep: float = min(next_updates, default=self.update_rate) - time_taken
                 logging.debug('looped in %.2fms, sleeping %.2fs.', time_taken * 1000, time_to_sleep)
                 if time_to_sleep > 0:
                     await asyncio.sleep(time_to_sleep)
         except KeyboardInterrupt:
             await self.mqtt_handler.mqttc.disconnect()
 
-    async def fetch(self, url: str) -> str:
+    async def fetch(self, url: str, headers: dict | None) -> str:
         async with httpcore.AsyncConnectionPool() as http:
             try:
-                response = await http.request("GET", url, headers=self.headers)
+                response = await http.request('GET', url, headers=headers or self.headers)
                 return response.content.decode()
             except ConnectError as e:
                 logging.warning(f'{e=}, {url=}')
