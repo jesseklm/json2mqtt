@@ -5,18 +5,26 @@ import signal
 import time
 import tomllib
 from functools import reduce
-from io import StringIO
 from pathlib import Path
 
 import httpcore
-import pandas as pd
 from httpcore import ConnectError
+from selectolax.lexbor import LexborHTMLParser
 
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
 with (Path(__file__).parent / 'pyproject.toml').open('rb') as f:
     __version__ = tomllib.load(f)['project']['version']
+
+
+def html_table_to_list(html: str, table_index: int = 0) -> list[list[str]]:
+    tree = LexborHTMLParser(html)
+    return [
+        [cell.text(strip=True) for cell in row.css('th, td')]
+        for row in tree.css('table')[table_index].css('tr')
+        if row.css('th, td')
+    ]
 
 
 class Json2Mqtt:
@@ -75,8 +83,7 @@ class Json2Mqtt:
             if not response:
                 continue
             if (html_table := request.get('html_table')) is not None:
-                df = pd.read_html(StringIO(response))[html_table]
-                js_content = df.to_dict(orient='records')
+                js_content = html_table_to_list(response, html_table)
             else:
                 js_content = json.loads(response)
             for topic, options in request['topics'].items():
