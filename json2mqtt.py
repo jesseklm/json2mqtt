@@ -5,9 +5,11 @@ import signal
 import time
 import tomllib
 from functools import reduce
+from io import StringIO
 from pathlib import Path
 
 import httpcore
+import pandas as pd
 from httpcore import ConnectError
 
 from config import get_first_config
@@ -27,6 +29,7 @@ class Json2Mqtt:
         # {
         #     "<URL>": {
         #         "update_rate": 60,                                # Optional: update interval in seconds
+        #         "html_table": 0,                                  # Optional: Index of HTML table to parse
         #         "headers": {                                      # Optional: HTTP headers specific to this URL
         #             "Authorization": "Bearer xxx",
         #             "Accept": "application/json"
@@ -71,7 +74,11 @@ class Json2Mqtt:
             response = await self.fetch(url, request.get('headers'))
             if not response:
                 continue
-            js_content = json.loads(response)
+            if (html_table := request.get('html_table')) is not None:
+                df = pd.read_html(StringIO(response))[html_table]
+                js_content = df.to_dict(orient='records')
+            else:
+                js_content = json.loads(response)
             for topic, options in request['topics'].items():
                 try:
                     value = reduce(lambda d, key: d[key], options['path'], js_content)
