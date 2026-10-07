@@ -83,9 +83,17 @@ class Json2Mqtt:
             if not response:
                 continue
             if (html_table := request.get('html_table')) is not None:
-                js_content = html_table_to_list(response, html_table)
+                try:
+                    js_content = html_table_to_list(response, html_table)
+                except IndexError as e:
+                    logging.warning('failed to parse HTML from %s: %s', url, e)
+                    continue
             else:
-                js_content = json.loads(response)
+                try:
+                    js_content = json.loads(response)
+                except json.JSONDecodeError as e:
+                    logging.warning('invalid JSON response from %s: %s', url, e)
+                    continue
             for topic, options in request['topics'].items():
                 try:
                     value = reduce(lambda d, key: d[key], options['path'], js_content)

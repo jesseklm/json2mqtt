@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -75,7 +75,7 @@ wheels = [
 
 [[package]]
 name = "json2mqtt"
-version = "1.0.19"
+version = "1.0.20"
 source = { virtual = "." }
 dependencies = [
     { name = "gmqtt" },
