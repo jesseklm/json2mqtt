@@ -1,10 +1,11 @@
 [project]
 name = "json2mqtt"
-version = "1.0.20"
+version = "1.0.21"
 requires-python = ">=3.14"
 dependencies = [
-    "gmqtt==0.7.0",
+    "croniter==6.2.4",
+    "gmqtt==0.8.0",
     "httpcore[asyncio]==1.0.9",
     "pyyaml==6.0.3",
-    "selectolax==0.4.13",
+    "selectolax==1.0.1",
 ]

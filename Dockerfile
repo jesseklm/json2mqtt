@@ -10,6 +10,7 @@ WORKDIR /app
 RUN uv sync --locked
 
 FROM python:3.14-alpine
+RUN apk add --no-cache tzdata
 COPY --from=builder /app /app
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app

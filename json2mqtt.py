@@ -13,6 +13,7 @@ from selectolax.lexbor import LexborHTMLParser
 
 from config import get_first_config
 from mqtt_handler import MqttHandler
+from scheduling import RequestSchedule
 
 with (Path(__file__).parent / 'pyproject.toml').open('rb') as f:
     __version__ = tomllib.load(f)['project']['version']
@@ -31,12 +32,14 @@ class Json2Mqtt:
     def __init__(self):
         config: dict = get_first_config()
         self.setup_logging(config)
-        self.mqtt_handler = MqttHandler(config)
         self.headers: dict = config.get('headers')
         # requests structure:
         # {
         #     "<URL>": {
         #         "update_rate": 60,                                # Optional: update interval in seconds
+        #         "cron": "0 12 * * *",                             # Optional: cron instead of update_rate
+        #         "jitter": 600,                                    # Optional: random +/- seconds per run
+        #         "timezone": "Europe/Berlin",                      # Optional: cron timezone (default: system)
         #         "html_table": 0,                                  # Optional: Index of HTML table to parse
         #         "headers": {                                      # Optional: HTTP headers specific to this URL
         #             "Authorization": "Bearer xxx",
@@ -53,8 +56,9 @@ class Json2Mqtt:
         #     }
         # }
         self.requests: dict = config['requests']
-        self.update_rate: int = config.get('update_rate', 600)
-        self.last_request: dict = {}
+        self.schedules = {url: RequestSchedule(config, request) for url, request in self.requests.items()}
+        self.has_cron = any(schedule.cron is not None for schedule in self.schedules.values())
+        self.mqtt_handler = MqttHandler(config)
 
     async def exit(self):
         await self.mqtt_handler.disconnect()
@@ -70,14 +74,11 @@ class Json2Mqtt:
                 logging.warning('unknown logging level: %s.', logging_level)
 
     async def loop_iteration(self) -> None:
-        now = time.monotonic()
-
         for url, request in self.requests.items():
-            update_rate = request.get('update_rate', self.update_rate)
-            last_run = self.last_request.get(url, 0)
-            if now - last_run < update_rate:
+            schedule = self.schedules[url]
+            if schedule.seconds_until_due() > 0:
                 continue
-            self.last_request[url] = now
+            schedule.advance()
 
             response = await self.fetch(url, request.get('headers'))
             if not response:
@@ -121,14 +122,13 @@ class Json2Mqtt:
                 start_time: float = time.perf_counter()
                 await self.loop_iteration()
                 time_taken: float = time.perf_counter() - start_time
-                next_updates = [
-                    request.get('update_rate', self.update_rate) - (time.monotonic() - self.last_request.get(url, 0))
-                    for url, request in self.requests.items()
-                ]
-                time_to_sleep: float = min(next_updates, default=self.update_rate) - time_taken
+                next_updates = [schedule.seconds_until_due() for schedule in self.schedules.values()]
+                time_to_sleep: float = max(0.0, min(next_updates, default=600))
+                if self.has_cron:
+                    # Recheck wall-clock deadlines after system clock changes.
+                    time_to_sleep = min(time_to_sleep, 60)
                 logging.debug('looped in %.2fms, sleeping %.2fs.', time_taken * 1000, time_to_sleep)
-                if time_to_sleep > 0:
-                    await asyncio.sleep(time_to_sleep)
+                await asyncio.sleep(time_to_sleep)
         except KeyboardInterrupt:
             await self.mqtt_handler.mqttc.disconnect()
 
