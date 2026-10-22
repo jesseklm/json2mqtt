@@ -48,6 +48,10 @@ class Json2Mqtt:
         #         "topics": {
         #             "<MQTT topic>": {
         #                 "path": ["json", "keys", "to", "value"],  # Path to the value in the JSON response
+        #                 "if": {                                   # Optional: only publish if this value matches
+        #                     "path": ["status", "enabled"],         # Path in the same response
+        #                     "equals": 1
+        #                 },
         #                 "retain": True,                           # Optional: MQTT retain flag
         #                 "offset": 1.0,                            # Optional: Value offset
         #                 "factor": 0.1                             # Optional: Value multiplier
@@ -56,6 +60,21 @@ class Json2Mqtt:
         #     }
         # }
         self.requests: dict = config['requests']
+        for request in self.requests.values():
+            for topic, options in request.get('topics', {}).items():
+                if 'if' not in options:
+                    continue
+                condition = options['if']
+                if (
+                        not isinstance(condition, dict)
+                        or not isinstance(condition.get('path'), list)
+                        or 'equals' not in condition
+                        or any(isinstance(key, bool) or not isinstance(key, (str, int))
+                               for key in condition['path'])
+                ):
+                    raise ValueError(
+                        f'invalid if condition for topic {topic!r}: expected a path list and equals value'
+                    )
         self.schedules = {url: RequestSchedule(config, request) for url, request in self.requests.items()}
         self.has_cron = any(schedule.cron is not None for schedule in self.schedules.values())
         self.mqtt_handler = MqttHandler(config)
@@ -97,9 +116,14 @@ class Json2Mqtt:
                     continue
             for topic, options in request['topics'].items():
                 try:
+                    if 'if' in options:
+                        condition = options['if']
+                        condition_value = reduce(lambda d, key: d[key], condition['path'], js_content)
+                        if condition_value != condition['equals']:
+                            continue
                     value = reduce(lambda d, key: d[key], options['path'], js_content)
-                except KeyError as e:
-                    logging.warning('unexpected response: %s. %s', js_content, str(e))
+                except (KeyError, IndexError, TypeError) as e:
+                    logging.warning('unexpected response for topic %s: %s. %s', topic, js_content, str(e))
                     continue
                 offset = 'offset' in options
                 factor = 'factor' in options

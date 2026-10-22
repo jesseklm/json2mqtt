@@ -53,6 +53,48 @@ requests:
   all missed occurrences. Cron stays anchored to its nominal times, so jitter
   does not accumulate from day to day.
 
+## Conditional topics
+
+Add an optional `if` block to a topic to publish its value only when another
+value in the same response equals the configured value:
+
+```yaml
+requests:
+  'https://example.com/device.json':
+    topics:
+      device/power:
+        path: [measurements, power]
+        if:
+          path: [status, enabled]
+          equals: 1
+        retain: true
+      device/standby_power:
+        path: [measurements, power]
+        if:
+          path: [status, enabled]
+          equals: 0
+```
+
+For a response like
+`{"status": {"enabled": 1}, "measurements": {"power": 42}}`, only
+`device/power` is published, with a payload of `42`.
+
+- Both paths start at the response root and use lists of object keys and/or
+  integer array indices, for example `[devices, 0, enabled]`. An empty path `[]`
+  selects the entire response. Conditions also work with parsed HTML tables,
+  whose cell values are strings.
+- `equals` is required and accepts YAML values, including numbers, strings,
+  booleans, and `null`. Values are compared without string/number conversion:
+  `equals: 1` matches the number `1`; `equals: "1"` matches the string `"1"`.
+- If the condition does not match or its path cannot be read, that topic is
+  skipped. An unreadable path is logged; other topics continue normally.
+  A missing path does not match `equals: null`.
+- The condition is checked on each fetched response, before extracting or
+  applying `offset`/`factor` to the topic value. Topics without `if` publish
+  normally. Skipping a topic does not clear a previously retained MQTT value.
+- An invalid `if` block is rejected at startup. Omit the block to disable the
+  condition.
+
 ## Tests
 
 ```sh
